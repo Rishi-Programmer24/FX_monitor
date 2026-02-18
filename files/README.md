@@ -1,6 +1,6 @@
 # FX Monitor - Version 1
 
-A foreign exchange rate monitoring system that alerts you when currency pairs move significantly.
+A foreign exchange rate monitoring system that alerts you when currency pairs move significantly. This is my first full attempt at this project, and am planning to correct errors and add more features to it in version 2.
 
 ## What This Does
 
