@@ -1,15 +1,15 @@
 from collections import deque
 import time
-from config import VOLATILITY_WINDOW, VOLATILITY_THRESHOLD, ALERT_COOLDOWN
+from fx_monitor.config import VOLATILITY_WINDOW, VOLATILITY_THRESHOLD, ALERT_COOLDOWN
 
 # Store price history and last alert time for each pair
-history = {}    
-last_alert = {}  
+history = {}      # pair -> deque[(timestamp, price)]
+last_alert = {}   # pair -> {"time": timestamp, "pct": severity}
 
 
 def update_and_check(pair, price):
     """
-    Check if price movement exceeds threshold and if we should alert.
+    Check if price movement exceeds threshold.
     Returns: (should_alert, percent_move, status_message)
     """
     now = time.time()
@@ -31,6 +31,9 @@ def update_and_check(pair, price):
     
     # Calculate price movement from oldest to newest
     oldest_price = dq[0][1]
+    if oldest_price == 0:
+        return False, 0.0, "Invalid baseline price"
+
     percent_move = abs((price - oldest_price) / oldest_price)
     
     # Check if movement exceeds threshold
@@ -50,11 +53,12 @@ def update_and_check(pair, price):
             return True, percent_move, "Cooldown expired"
         
         elif percent_move > 2 * prev_alert["pct"]:
+            # Severity doubled - alert even during cooldown
             last_alert[pair] = {"time": now, "pct": percent_move}
             return True, percent_move, "Severity escalation!"
         
         else:
-            # In cooldown 
+            # In cooldown period
             return False, percent_move, "In cooldown period"
     
     return False, percent_move, "Normal movement"
