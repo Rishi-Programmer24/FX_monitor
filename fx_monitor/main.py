@@ -1,118 +1,71 @@
-import time
-from datetime import datetime
-
-import requests
+import argparse
 
 from fx_monitor.config import (
-    API_KEY,
-    BASE_URL,
-    PAIRS,
-    CHECK_INTERVAL,
-    VOLATILITY_THRESHOLD,
+    DEFAULT_END_DATE,
+    DEFAULT_OUTPUT_DIR,
+    DEFAULT_ROLLING_WINDOW,
+    DEFAULT_START_DATE,
 )
-from fx_monitor.analyser import update_and_check
+from fx_monitor.live_monitor import run_live_monitor
+from fx_monitor.macro_analysis import run_macro_tracker
 
 
-def fetch_price(session: requests.Session, pair_name: str, from_curr: str, to_curr: str, retries: int = 3):
-    """
-    Pull the current exchange rate from Alpha Vantage.
-    Returns the rate as a float, or None if something went wrong.
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="FX Monitor toolkit for live volatility alerts and macro divergence analysis."
+    )
+    subparsers = parser.add_subparsers(dest="command")
 
-    Note: Alpha Vantage doesn't always use HTTP 429 for throttling - sometimes
-    it just returns a 200 with a "Note" or "Information" field in the JSON instead.
-    """
-    params = {
-        "function": "CURRENCY_EXCHANGE_RATE",
-        "from_currency": from_curr,
-        "to_currency": to_curr,
-        "apikey": API_KEY,
-    }
+    live_parser = subparsers.add_parser("live", help="Run the real-time FX volatility monitor.")
+    live_parser.set_defaults(command="live")
 
-    for attempt in range(1, retries + 1):
-        try:
-            response = session.get(BASE_URL, params=params, timeout=10)
+    macro_parser = subparsers.add_parser(
+        "macro",
+        help="Run the East-West Macro Divergence Tracker for GBP/JPY and 10Y yields.",
+    )
+    macro_parser.add_argument("--start-date", default=DEFAULT_START_DATE)
+    macro_parser.add_argument("--end-date", default=DEFAULT_END_DATE)
+    macro_parser.add_argument("--window", type=int, default=DEFAULT_ROLLING_WINDOW)
+    macro_parser.add_argument("--output-dir", default=DEFAULT_OUTPUT_DIR)
+    macro_parser.add_argument(
+        "--skip-plot",
+        action="store_true",
+        help="Save the merged dataset without rendering the chart.",
+    )
+    macro_parser.set_defaults(command="macro")
 
-            if response.status_code == 429:
-                print(f"  Rate limited on {pair_name}, waiting 60 seconds")
-                time.sleep(60)
-                continue
-
-            response.raise_for_status()
-            data = response.json()
-
-            # Alpha Vantage hides throttle messages in the response body
-            if isinstance(data, dict) and ("Note" in data or "Information" in data):
-                msg = data.get("Note") or data.get("Information")
-                print(f"  API message for {pair_name}: {msg}")
-                time.sleep(60)
-                continue
-
-            if isinstance(data, dict) and ("Error Message" in data):
-                print(f"  API error for {pair_name}: {data.get('Error Message')}")
-                return None
-
-            price = float(data["Realtime Currency Exchange Rate"]["5. Exchange Rate"])
-            return price
-
-        except requests.exceptions.RequestException as e:
-            print(f"  Network error on {pair_name} (attempt {attempt}/{retries}): {e}")
-            # back off a bit before retrying: 1s, 2s, 4s
-            time.sleep(2 ** (attempt - 1))
-        except (KeyError, ValueError, TypeError) as e:
-            print(f"  Couldn't parse response for {pair_name}: {e}")
-            return None
-
-    return None
-
-
-def format_time() -> str:
-    return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    return parser.parse_args()
 
 
 def main():
-    print("=" * 60)
-    print(" FX Monitor")
-    print(f" Watching: {', '.join(PAIRS.keys())}")
-    print(f" Checking every {CHECK_INTERVAL} seconds")
-    print(f" Alert threshold: {VOLATILITY_THRESHOLD * 100:.2f}%")
-    print("=" * 60)
-    print()
+    args = parse_args()
 
-    session = requests.Session()
+    if args.command in (None, "live"):
+        run_live_monitor()
+        return
 
-    try:
-        while True:
-            print(f"\n[{format_time()}] Checking prices")
+    result = run_macro_tracker(
+        start_date=args.start_date,
+        end_date=args.end_date,
+        rolling_window=args.window,
+        output_dir=args.output_dir,
+        save_plot=not args.skip_plot,
+    )
 
-            for pair_name, params in PAIRS.items():
-                price = fetch_price(
-                    session=session,
-                    pair_name=pair_name,
-                    from_curr=params["from_currency"],
-                    to_curr=params["to_currency"],
-                )
-
-                if price is None:
-                    print(f"  {pair_name}: failed to fetch")
-                    continue
-
-                should_alert, pct_move, status = update_and_check(pair_name, price)
-
-                if should_alert:
-                    print(f"  ALERT: {pair_name} = {price:.4f} (moved {pct_move*100:.2f}%)")
-                    print(f"  Reason: {status}")
-                else:
-                    print(f"  {pair_name} = {price:.4f} (moved {pct_move*100:.2f}%) - {status}")
-
-            print(f"\n  Next check in {CHECK_INTERVAL} seconds")
-            time.sleep(CHECK_INTERVAL)
-
-    except KeyboardInterrupt:
-        pass
-    finally:
-        session.close()
-        print("\n Shutting down")
-        print("=" * 60)
+    summary = result["summary"]
+    print("East-West Macro Divergence Tracker")
+    print(f"Sample: {summary['start_date']} to {summary['end_date']}")
+    print(f"Latest GBP/JPY: {summary['latest_fx']:.2f}")
+    print(f"Latest UK-Japan 10Y spread: {summary['latest_spread']:.2f} percentage points")
+    print(
+        f"Latest valid {args.window}D rolling correlation: "
+        f"{summary['latest_corr']:.2f} (as of {summary['latest_corr_date']})"
+    )
+    print(f"Dataset saved to: {result['csv_path']}")
+    if result["plot_path"] is not None:
+        print(f"Chart saved to: {result['plot_path']}")
+    print(f"Yield sources: {result['sources']}")
+    print(result["finding"])
 
 
 if __name__ == "__main__":
