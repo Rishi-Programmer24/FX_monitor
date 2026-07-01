@@ -2,9 +2,6 @@
 
 FX Monitor now combines two complementary workflows: a live FX volatility monitor for short-term moves and an East-West Macro Divergence Tracker focused on GBP/JPY, UK 10-year gilt yields, and Japan 10-year government bond yields. The macro project is built to show how monetary-policy divergence between the Bank of England and the Bank of Japan feeds through into rates differentials, capital flows, and the GBP/JPY exchange rate.
 
-## Why this project matters
-
-For a Global Markets application, macro divergence is more relevant than a pure equity screen because it sits closer to how sales and trading desks actually think. The economic logic is straightforward: when UK yields rise relative to Japan's, sterling assets become more attractive on a hedged or unhedged basis, capital tends to flow toward the UK, and GBP/JPY often appreciates. The tracker is designed to test that relationship directly and highlight when it strengthens, weakens, or breaks down around major central-bank decisions.
 
 ## Project structure
 
@@ -59,10 +56,5 @@ python -m fx_monitor.main live
 
 ## Key finding
 
-Between 2023-03-13 and 2026-04-03, GBP/JPY rose 29.7% while the UK-Japan 10Y yield spread ended at 2.21 percentage points. Over the same sample, the 60-day rolling correlation between the spread and GBP/JPY averaged -0.07; the latest valid reading was -0.03 on 2026-03-24, it peaked at 0.91 on 2024-09-20, and fell to -0.88 on 2026-01-21. In plain English, that is broadly consistent with the idea that wider UK-Japan rate differentials can support sterling against the yen, but it also shows the relationship is regime-dependent and can break down when the spread proxy flattens or when other macro forces dominate the cross.
+Between 2023-03-13 and 2026-04-03, GBP/JPY rose 29.7% while the UK-Japan 10Y yield spread ended at 2.21 percentage points. Over the same sample, the 60-day rolling correlation between the spread and GBP/JPY averaged -0.07; the latest valid reading was -0.03 on 2026-03-24, it peaked at 0.91 on 2024-09-20, and fell to -0.88 on 2026-01-21. In plain English, that is broadly consistent with the idea that wider UK-Japan rate differentials can support sterling against the yen, but it also shows the relationship is regimedependent and can break down when the spread proxy flattens or when other macro forces dominate the cross.
 
-## Notes on data quality
-
-- Yahoo Finance yield tickers can be unreliable, so the script explicitly checks for empty or stale series before accepting them.
-- The FRED fallback series suggested in the project brief are more stable, but they are lower frequency than Yahoo data, so forward-filling is used after merging and zero-variance windows are excluded from the rolling-correlation summary.
-- Alpha Vantage free-tier limits can throttle requests; the live monitor already contains basic retry logic for this.
